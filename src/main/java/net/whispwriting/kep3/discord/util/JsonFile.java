@@ -142,7 +142,7 @@ public class JsonFile {
         }
     }
 
-    public static boolean exists(String path, String name){
+    public static boolean exists(String name, String path){
         return new File(path, name + ".json").exists();
     }
 

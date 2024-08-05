@@ -22,9 +22,15 @@ import net.whispwriting.kep3.discord.util.Application;
 import net.whispwriting.kep3.discord.util.JsonFile;
 import net.whispwriting.kep3.discord.util.Profile;
 import net.whispwriting.kep3.discord.util.Strings;
+import okhttp3.*;
+import org.json.JSONArray;
 import org.json.simple.JSONObject;
 
 import javax.security.auth.login.LoginException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +43,10 @@ public class Kep3 {
     private static Map<String, Application> applications = new HashMap<>();
     private Map<String, Profile> profiles = new HashMap<>();
     private String avatar;
+
+    private OkHttpClient client;
+    public static final MediaType JSON
+            = MediaType.parse("application/json; charset=utf-8");
 
     private String applicationMessageID = "";
     private boolean isAcceptingApplications;
@@ -56,6 +66,7 @@ public class Kep3 {
                     loadAnnouncers();
                     loadDJProfiles();
                     loadDJApplications();
+                    loadAiClient();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -81,6 +92,7 @@ public class Kep3 {
         jda.addEventListener((new ApplyButton()));
         jda.addEventListener(new CreateProfileButton());
         jda.addEventListener(new UpdateProfileButton());
+        jda.addEventListener(new ChatWithKep3());
         avatar = jda.getSelfUser().getAvatarUrl();
     }
 
@@ -122,12 +134,19 @@ public class Kep3 {
         }
 
     }
+
+    private void loadAiClient(){
+        client = new OkHttpClient();
+    }
+
     public JDA getJDA() {
         return jda;
     }
+
     public String getAvatar() {
         return avatar;
     }
+
     public Map<TextChannel, TextChannel> getAnnouncerChannels() {
         return announcerChannels;
     }
@@ -135,18 +154,40 @@ public class Kep3 {
     public JsonFile getAnnouncerFile(){
         return announcers;
     }
+
     public void setPresence(Activity activity){
         jda.getPresence().setActivity(activity);
     }
+
     public void registerCommand(String label, Command command){
         handler.registerCommand(label, command);
     }
+
     public void sendMessage(String message, TextChannel channel, long delay){
         channel.sendTyping().queue();
         try{
             Thread.sleep(delay);
             channel.sendMessage(message).queue();
         }catch (InterruptedException e){
+            e.printStackTrace();
+        }
+    }
+
+    public void sendAIMessage(TextChannel channel, String message){
+        org.json.JSONObject jsonBuilder = new org.json.JSONObject();
+        jsonBuilder.put("message", message);
+        RequestBody body = RequestBody.create(jsonBuilder.toString(), JSON);
+        Request request = new Request.Builder()
+                .url("http://localhost:8080/cai_prompt")
+                .post(body)
+                .build();
+        try(Response response = client.newCall(request).execute()){
+            ResponseBody responseBody = response.body();
+            org.json.JSONObject json = new org.json.JSONObject(responseBody.string());
+            sendMessage(json.getJSONObject("response").getString("text"), channel, 0);
+        }
+        catch(Exception e){
+            System.err.println("Failed to process AI response.");
             e.printStackTrace();
         }
     }
